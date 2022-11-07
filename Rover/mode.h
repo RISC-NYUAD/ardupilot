@@ -431,6 +431,7 @@ public:
     // set desired heading-delta, turn-rate and speed
     void set_desired_heading_delta_and_speed(float yaw_delta_cd, float target_speed);
     void set_desired_turn_rate_and_speed(float turn_rate_cds, float target_speed);
+    void set_desired_omni_turn_rate_and_speed(float turn_rate_cds, float x_target_speed, float y_target_speed);
 
     // set steering and throttle (-1 to +1).  Only called from scripts
     void set_steering_and_throttle(float steering, float throttle);
@@ -477,6 +478,8 @@ protected:
     float _desired_yaw_rate_cds;// target turn rate centi-degrees per second
     bool send_notification;     // used to send one time notification to ground station
     float _desired_speed;       // desired speed used only in HeadingAndSpeed submode
+    float _desired_speed_omni_x; // desired forward (throttle) speed only for omnivehicles
+    float _desired_speed_omni_y; // desired side (lateral) speed only for omnivehicles
 
     // direct steering and throttle control
     bool _have_strthr;          // true if we have a valid direct steering and throttle inputs

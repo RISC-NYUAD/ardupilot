@@ -561,9 +561,9 @@ void AP_MotorsUGV::setup_omni()
 
     case FRAME_TYPE_OMNI3:
         _motors_num = 3;
-        add_omni_motor(0, 1.0f, -1.0f, -1.0f);
+        add_omni_motor(0, 0.5f, -1.0f, -0.5);
         add_omni_motor(1, 0.0f, -1.0f, 1.0f);
-        add_omni_motor(2, 1.0f, 1.0f, 1.0f);
+        add_omni_motor(2, 0.5f, 1.0f, 0.5f);
         break;
 
     case FRAME_TYPE_OMNIX:
