@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <GCS_MAVLink/GCS_MAVLink.h>
+#include <AP_AHRS/AP_AHRS.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_Mission/AP_Mission.h>
 #include <AP_Mission/AP_Mission_ChangeDetector.h>
@@ -180,6 +181,8 @@ protected:
     // on things like proximity to corners and current speed
     virtual void calc_throttle(float target_speed, bool avoidance_enabled);
 
+    virtual void calc_lateral(float target_speed, bool avoidance_enabled);
+
     // performs a controlled stop. returns true once vehicle has stopped
     bool stop_vehicle();
 
@@ -251,6 +254,8 @@ public:
     // methods that affect movement of the vehicle in this mode
     void update() override;
     void calc_throttle(float target_speed, bool avoidance_enabled) override;
+    
+    void calc_lateral(float target_speed, bool avoidance_enabled) override;
 
     // attributes of the mode
     bool is_autopilot_mode() const override { return true; }

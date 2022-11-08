@@ -287,6 +287,60 @@ void Mode::handle_tack_request()
 void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
 {
     // get acceleration limited target speed
+//    float speed_hold = target_speed;
+    target_speed = attitude_control.get_desired_speed_accel_limited(target_speed, rover.G_Dt);
+
+//    gcs().send_text(MAV_SEVERITY_WARNING, "Speed before: %.3f , Speed after: %.3f", speed_hold, target_speed );
+
+    // apply object avoidance to desired speed using half vehicle's maximum deceleration
+    if (avoidance_enabled) {
+        g2.avoid.adjust_speed(0.0f, 0.5f * attitude_control.get_decel_max(), ahrs.yaw, target_speed, rover.G_Dt);
+        if (g2.sailboat.tack_enabled() && g2.avoid.limits_active()) {
+            // we are a sailboat trying to avoid fence, try a tack
+            if (rover.control_mode != &rover.mode_acro) {
+                rover.control_mode->handle_tack_request();
+            }
+        }
+    }
+
+    // call throttle controller and convert output to -100 to +100 range
+    float throttle_out = 0.0f;
+
+    if (rover.g2.sailboat.sail_enabled()) {
+        // sailboats use special throttle and mainsail controller
+        float mainsail_out = 0.0f;
+        float wingsail_out = 0.0f;
+        float mast_rotation_out = 0.0f;
+        rover.g2.sailboat.get_throttle_and_mainsail_out(target_speed, throttle_out, mainsail_out, wingsail_out, mast_rotation_out);
+        rover.g2.motors.set_mainsail(mainsail_out);
+        rover.g2.motors.set_wingsail(wingsail_out);
+        rover.g2.motors.set_mast_rotation(mast_rotation_out);
+    } else {
+        // call speed or stop controller
+        if (is_zero(target_speed) && !rover.is_balancebot()) {
+            bool stopped;
+            throttle_out = 100.0f * attitude_control.get_throttle_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped);
+        } else {
+            throttle_out = 100.0f * attitude_control.get_throttle_out_speed(target_speed, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt);
+        }
+
+        // if vehicle is balance bot, calculate actual throttle required for balancing
+        if (rover.is_balancebot()) {
+            rover.balancebot_pitch_control(throttle_out);
+        }
+    }
+
+    // send to motor
+    if( rover.g2.frame_type.get() != AP_MotorsUGV::FRAME_TYPE_UNDEFINED ){
+	    g2.motors.set_throttle(throttle_out * 200.0f);
+	}else{
+		g2.motors.set_throttle(throttle_out);
+	}
+}
+
+void Mode::calc_lateral(float target_speed, bool avoidance_enabled)
+{
+    // get acceleration limited target speed
     target_speed = attitude_control.get_desired_speed_accel_limited(target_speed, rover.G_Dt);
 
     // apply object avoidance to desired speed using half vehicle's maximum deceleration
@@ -328,8 +382,9 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
     }
 
     // send to motor
-    g2.motors.set_throttle(throttle_out);
+    g2.motors.set_throttle(throttle_out * 200.0f);
 }
+
 
 // performs a controlled stop without turning
 bool Mode::stop_vehicle()

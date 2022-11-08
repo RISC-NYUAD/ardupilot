@@ -17,6 +17,7 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_HAL/AP_HAL.h>
 #include "AR_AttitudeControl.h"
+#include <GCS_MAVLink/GCS_MAVLink.h>
 #include <AP_GPS/AP_GPS.h>
 
 // attitude control default definition
@@ -803,6 +804,7 @@ bool AR_AttitudeControl::get_forward_speed(float &speed) const
     const AP_AHRS &_ahrs = AP::ahrs();
     if (!_ahrs.get_velocity_NED(velocity)) {
         // use less accurate GPS, assuming entire length is along forward/back axis of vehicle
+    	gcs().send_text(MAV_SEVERITY_WARNING, "No NED Velocity Estimate in AHRS");        
         if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
             if (abs(wrap_180_cd(_ahrs.yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
                 speed = AP::gps().ground_speed();
@@ -816,6 +818,28 @@ bool AR_AttitudeControl::get_forward_speed(float &speed) const
     }
     // calculate forward speed velocity into body frame
     speed = velocity.x*_ahrs.cos_yaw() + velocity.y*_ahrs.sin_yaw();
+    return true;
+}
+
+bool AR_AttitudeControl::get_lateral_speed(float &speed) const
+{
+    Vector3f velocity;
+    const AP_AHRS &_ahrs = AP::ahrs();
+    if (!_ahrs.get_velocity_NED(velocity)) {
+        // use less accurate GPS, assuming entire length is along forward/back axis of vehicle
+        if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
+            if (abs(wrap_180_cd(_ahrs.yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
+                speed = AP::gps().ground_speed();
+            } else {
+                speed = -AP::gps().ground_speed();
+            }
+            return true;
+        } else {
+            return false;
+        }
+    }
+    // calculate forward speed velocity into body frame
+    speed = -1.0f *velocity.x*_ahrs.sin_yaw() + velocity.y*_ahrs.cos_yaw();
     return true;
 }
 
@@ -838,6 +862,14 @@ bool AR_AttitudeControl::speed_control_active() const
     return true;
 }
 
+bool AR_AttitudeControl::lateral_speed_control_active() const
+{
+	if ((_lateral_speed_last_ms == 0) || ((AP_HAL::millis() - _speed_last_ms) > AR_ATTCONTROL_TIMEOUT_MS)) {
+		return false;
+	}
+	return true;
+}
+
 // get latest desired speed recorded during call to get_throttle_out_speed.  For reporting purposes only
 float AR_AttitudeControl::get_desired_speed() const
 {
@@ -846,6 +878,26 @@ float AR_AttitudeControl::get_desired_speed() const
         return 0.0f;
     }
     return _desired_speed;
+}
+
+float AR_AttitudeControl::get_desired_lateral_speed_accel_limited(float desired_speed, float dt) const
+{
+	if(!lateral_speed_control_active() || is_positive(_throttle_accel_max)){
+		return desired_speed;
+	}
+	dt = constrain_float(dt, 0.0f, 1.0f);
+	float speed_prev = _desired_speed_lateral ; 
+	if(!lateral_speed_control_active()){
+		get_lateral_speed(speed_prev); 
+	}
+    // acceleration limit desired speed
+    float speed_change_max;
+    if (fabsf(desired_speed) < fabsf(_desired_speed_lateral) && is_positive(_throttle_decel_max)) {
+        speed_change_max = _throttle_decel_max * dt;
+    } else {
+        speed_change_max = _throttle_accel_max * dt;
+    }
+    return constrain_float(desired_speed, speed_prev - speed_change_max, speed_prev + speed_change_max);
 }
 
 // get acceleration limited desired speed
