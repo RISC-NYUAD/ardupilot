@@ -341,8 +341,8 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
 void Mode::calc_lateral(float target_speed, bool avoidance_enabled)
 {
     // get acceleration limited target speed
-    target_speed = attitude_control.get_desired_speed_accel_limited(target_speed, rover.G_Dt);
-
+    target_speed = attitude_control.get_desired_lateral_speed_accel_limited(target_speed, rover.G_Dt);
+	
     // apply object avoidance to desired speed using half vehicle's maximum deceleration
     if (avoidance_enabled) {
         g2.avoid.adjust_speed(0.0f, 0.5f * attitude_control.get_decel_max(), ahrs.yaw, target_speed, rover.G_Dt);
@@ -370,9 +370,9 @@ void Mode::calc_lateral(float target_speed, bool avoidance_enabled)
         // call speed or stop controller
         if (is_zero(target_speed) && !rover.is_balancebot()) {
             bool stopped;
-            throttle_out = 100.0f * attitude_control.get_throttle_out_stop(g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped);
+            throttle_out = 100.0f * attitude_control.get_lateral_throttle_out_stop(g2.motors.limit.lateral_throttle_lower, g2.motors.limit.lateral_throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, stopped);
         } else {
-            throttle_out = 100.0f * attitude_control.get_throttle_out_speed(target_speed, g2.motors.limit.throttle_lower, g2.motors.limit.throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt);
+            throttle_out = 100.0f * attitude_control.get_lateral_throttle_out_speed(target_speed, g2.motors.limit.lateral_throttle_lower, g2.motors.limit.lateral_throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt);
         }
 
         // if vehicle is balance bot, calculate actual throttle required for balancing
@@ -382,7 +382,8 @@ void Mode::calc_lateral(float target_speed, bool avoidance_enabled)
     }
 
     // send to motor
-    g2.motors.set_throttle(throttle_out * 200.0f);
+    gcs().send_text(MAV_SEVERITY_WARNING, "Lateral Speed: %.3f , Throttle: %.3f", target_speed, throttle_out);
+    g2.motors.set_lateral(throttle_out * 10.0f);
 }
 
 
@@ -407,6 +408,14 @@ bool Mode::stop_vehicle()
 
     // send to motor
     g2.motors.set_throttle(throttle_out);
+
+	if( rover.g2.frame_type.get() != AP_MotorsUGV::FRAME_TYPE_UNDEFINED ){//omni vehicle needs to stop lateral motion as well
+		bool lateral_stopped = false;
+		float lateral_throttle_out ;
+        lateral_throttle_out = 100.0f * attitude_control.get_lateral_throttle_out_stop(g2.motors.limit.lateral_throttle_lower, g2.motors.limit.lateral_throttle_upper, g.speed_cruise, g.throttle_cruise * 0.01f, rover.G_Dt, lateral_stopped);
+		g2.motors.set_lateral(lateral_throttle_out);
+	}
+
 
     // do not turn while slowing down
     float steering_out = 0.0;

@@ -100,7 +100,7 @@ void ModeGuided::update()
 		            set_steering(steering_out * 4500.0f);
 //		            gcs().send_text(MAV_SEVERITY_WARNING, "Forward Velocity CMD: %.3f", forward_v);
 		            calc_throttle(_desired_speed_omni_x, false);					
-					//calc_lateral(_desired_speed_omni_y, false);
+					calc_lateral(_desired_speed_omni_y, false);
 		            
 		            //g2.motors.set_throttle(_desired_speed_omni_x * g.throttle_cruise / g.speed_cruise * 1200.0f);
 				    //g2.motors.set_lateral(_desired_speed_omni_y * g.throttle_cruise / g.speed_cruise * 900.0f);		            
