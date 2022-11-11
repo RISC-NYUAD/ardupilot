@@ -332,7 +332,7 @@ void Mode::calc_throttle(float target_speed, bool avoidance_enabled)
 
     // send to motor
     if( rover.g2.frame_type.get() != AP_MotorsUGV::FRAME_TYPE_UNDEFINED ){
-	    g2.motors.set_throttle(throttle_out * 200.0f);
+	    g2.motors.set_throttle(throttle_out);
 	}else{
 		g2.motors.set_throttle(throttle_out);
 	}
@@ -383,7 +383,7 @@ void Mode::calc_lateral(float target_speed, bool avoidance_enabled)
 
     // send to motor
     gcs().send_text(MAV_SEVERITY_WARNING, "Lateral Speed: %.3f , Throttle: %.3f", target_speed, throttle_out);
-    g2.motors.set_lateral(throttle_out * 10.0f);
+    g2.motors.set_lateral(throttle_out);
 }
 
 

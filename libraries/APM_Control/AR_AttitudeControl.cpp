@@ -677,14 +677,14 @@ float AR_AttitudeControl::get_lateral_throttle_out_speed(float desired_speed, bo
 
     // get speed forward
     float speed;
-    if (!get_forward_speed(speed)) {
+    if (!get_lateral_speed(speed)) {
         // we expect caller will not try to control heading using rate control without a valid speed estimate
         // on failure to get speed we do not attempt to steer
         return 0.0f;
     }
 
     // if not called recently, reset input filter and desired speed to actual speed (used for accel limiting)
-    if (!speed_control_active()) {
+    if (!lateral_speed_control_active()) {
         _lateral_throttle_speed_pid.reset_filter();
         _lateral_throttle_speed_pid.reset_I();
         _desired_speed_lateral = speed;
@@ -974,7 +974,7 @@ bool AR_AttitudeControl::speed_control_active() const
 
 bool AR_AttitudeControl::lateral_speed_control_active() const
 {
-	if ((_lateral_speed_last_ms == 0) || ((AP_HAL::millis() - _speed_last_ms) > AR_ATTCONTROL_TIMEOUT_MS)) {
+	if ((_lateral_speed_last_ms == 0) || ((AP_HAL::millis() - _lateral_speed_last_ms) > AR_ATTCONTROL_TIMEOUT_MS)) {
 		return false;
 	}
 	return true;

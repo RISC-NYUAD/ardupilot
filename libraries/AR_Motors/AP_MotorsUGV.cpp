@@ -832,6 +832,8 @@ void AP_MotorsUGV::output_omni(bool armed, float steering, float throttle, float
             limit.steer_right = true;
             limit.throttle_lower = true;
             limit.throttle_upper = true;
+            limit.lateral_throttle_lower = true;
+            limit.lateral_throttle_upper = true;
         }
     } else {
         // handle disarmed case
