@@ -289,7 +289,7 @@ void AP_MotorsUGV::output(bool armed, float ground_speed, float dt)
 
     // clear limit flags
     // output_ methods are responsible for setting them to true if required on each iteration
-    limit.steer_left = limit.steer_right = limit.throttle_lower = limit.throttle_upper = false;
+    limit.steer_left = limit.steer_right = limit.throttle_lower = limit.throttle_upper = limit.lateral_throttle_lower = limit.lateral_throttle_upper = false;
 
     // sanity check parameters
     sanity_check_parameters();
@@ -797,6 +797,8 @@ void AP_MotorsUGV::output_omni(bool armed, float steering, float throttle, float
     if (armed) {
         // clear and set limits based on input
         set_limits_from_input(armed, steering, throttle);
+        limit.lateral_throttle_lower |= !armed || (lateral <= -_throttle_max);
+	    limit.lateral_throttle_upper |= !armed || (lateral >= _throttle_max);
 
         // constrain steering
         steering = constrain_float(steering, -4500.0f, 4500.0f);
