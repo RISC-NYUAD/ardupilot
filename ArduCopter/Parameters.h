@@ -620,6 +620,10 @@ public:
     // Autonmous autorotation
     AC_Autorotation arot;
 #endif
+
+#if MODE_GUIDED_ENABLED == ENABLED
+    AP_Int32 guided_options;
+#endif
 };
 
 extern const AP_Param::Info        var_info[];
