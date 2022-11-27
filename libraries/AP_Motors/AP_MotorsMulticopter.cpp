@@ -21,6 +21,7 @@
 
 #include "AP_MotorsMulticopter.h"
 #include <AP_HAL/AP_HAL.h>
+#include <GCS_MAVLink/GCS.h>
 #include <AP_BattMonitor/AP_BattMonitor.h>
 
 extern const AP_HAL::HAL& hal;
@@ -252,6 +253,8 @@ void AP_MotorsMulticopter::output()
 
     // convert rpy_thrust values to pwm
     output_to_motors();
+
+	gcs().send_text(MAV_SEVERITY_WARNING, "Throttle: %.3f", get_throttle());
 
     // output any booster throttle
     output_boost_throttle();
