@@ -254,7 +254,7 @@ void AP_MotorsMulticopter::output()
     // convert rpy_thrust values to pwm
     output_to_motors();
 
-	gcs().send_text(MAV_SEVERITY_WARNING, "Throttle: %.3f", get_throttle());
+	//gcs().send_text(MAV_SEVERITY_WARNING, "Throttle: %.3f", get_throttle());
 
     // output any booster throttle
     output_boost_throttle();
