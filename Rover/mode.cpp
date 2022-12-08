@@ -382,7 +382,7 @@ void Mode::calc_lateral(float target_speed, bool avoidance_enabled)
     }
 
     // send to motor
-    gcs().send_text(MAV_SEVERITY_WARNING, "Lateral Speed: %.3f , Throttle: %.3f", target_speed, throttle_out);
+    //gcs().send_text(MAV_SEVERITY_WARNING, "Lateral Speed: %.3f , Throttle: %.3f", target_speed, throttle_out);
     g2.motors.set_lateral(throttle_out);
 }
 
