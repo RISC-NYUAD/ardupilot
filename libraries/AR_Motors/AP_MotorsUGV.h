@@ -118,6 +118,8 @@ public:
         uint8_t steer_right     : 1; // we have reached the steering controller's right most limit
         uint8_t throttle_lower  : 1; // we have reached throttle's lower limit
         uint8_t throttle_upper  : 1; // we have reached throttle's upper limit
+        uint8_t lateral_throttle_lower : 1;
+        uint8_t lateral_throttle_upper : 1;
     } limit;
 
     // var_info for holding Parameter information

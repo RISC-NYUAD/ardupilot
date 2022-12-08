@@ -1,6 +1,7 @@
 #include "mode.h"
 #include "Rover.h"
 
+
 bool ModeGuided::_enter()
 {
     // initialise submode to stop or loiter
@@ -83,12 +84,27 @@ void ModeGuided::update()
             }
             if (have_attitude_target) {
                 // run steering and throttle controllers
-                float steering_out = attitude_control.get_steering_out_rate(radians(_desired_yaw_rate_cds / 100.0f),
-                                                                            g2.motors.limit.steer_left,
-                                                                            g2.motors.limit.steer_right,
-                                                                            rover.G_Dt);
-                set_steering(steering_out * 4500.0f);
-                calc_throttle(calc_speed_nudge(_desired_speed, is_negative(_desired_speed)), true);
+                float steering_out;
+                if( rover.g2.frame_type.get() == AP_MotorsUGV::FRAME_TYPE_UNDEFINED ){
+		            steering_out = attitude_control.get_steering_out_rate(radians(_desired_yaw_rate_cds / 100.0f),
+		                                                                        g2.motors.limit.steer_left,
+		                                                                        g2.motors.limit.steer_right,
+		                                                                        rover.G_Dt);
+		            set_steering(steering_out * 4500.0f);
+		            calc_throttle(calc_speed_nudge(_desired_speed, is_negative(_desired_speed)), true);
+				}else{// handling the omnivehicle case
+				    steering_out = attitude_control.get_steering_out_rate(radians(_desired_yaw_rate_cds / 100.0f),
+		                                                                        g2.motors.limit.steer_left,
+		                                                                        g2.motors.limit.steer_right,
+		                                                                        rover.G_Dt);
+		            set_steering(steering_out * 4500.0f);
+//		            gcs().send_text(MAV_SEVERITY_WARNING, "Forward Velocity CMD: %.3f", forward_v);
+		            calc_throttle(_desired_speed_omni_x, false);					
+					calc_lateral(_desired_speed_omni_y, false);
+		            
+		            //g2.motors.set_throttle(_desired_speed_omni_x * g.throttle_cruise / g.speed_cruise * 1200.0f);
+				    //g2.motors.set_lateral(_desired_speed_omni_y * g.throttle_cruise / g.speed_cruise * 900.0f);		            
+				}
             } else {
                 // we have reached the destination so stay here
                 if (rover.is_boat()) {
@@ -367,6 +383,23 @@ void ModeGuided::set_desired_turn_rate_and_speed(float turn_rate_cds, float targ
 
     // log new target
     rover.Log_Write_GuidedTarget(_guided_mode, Vector3f(_desired_yaw_rate_cds, 0.0f, 0.0f), Vector3f(_desired_speed, 0.0f, 0.0f));
+}
+
+void ModeGuided::set_desired_omni_turn_rate_and_speed(float turn_rate_cds, float x_target_speed, float y_target_speed)
+{
+    // handle initialisation
+    _guided_mode = ModeGuided::Guided_TurnRateAndSpeed;
+    _des_att_time_ms = AP_HAL::millis();
+
+    // record targets
+    const AP_AHRS &_ahrs = AP::ahrs();
+    _desired_speed_omni_x = x_target_speed * _ahrs.cos_yaw() + y_target_speed * _ahrs.sin_yaw();		            
+	_desired_speed_omni_y = -1.0f * x_target_speed * _ahrs.sin_yaw() + y_target_speed * _ahrs.cos_yaw() ; 
+    _desired_yaw_rate_cds = turn_rate_cds;
+    have_attitude_target = true;
+
+    // log new target
+    rover.Log_Write_GuidedTarget(_guided_mode, Vector3f(_desired_yaw_rate_cds, 0.0f, 0.0f), Vector3f(_desired_speed_omni_x, _desired_speed_omni_y, 0.0f));
 }
 
 // set steering and throttle (both in the range -1 to +1)

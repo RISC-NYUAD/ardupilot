@@ -912,6 +912,8 @@ void GCS_MAVLINK_Rover::handle_set_position_target_local_ned(const mavlink_messa
     }
 
     float target_speed = 0.0f;
+    float omni_x_target_speed = 0.0f;
+    float omni_y_target_speed = 0.0f;
     float target_yaw_cd = 0.0f;
 
     // consume velocity and convert to target speed and heading
@@ -919,6 +921,8 @@ void GCS_MAVLINK_Rover::handle_set_position_target_local_ned(const mavlink_messa
         const float speed_max = rover.control_mode->get_speed_default();
         // convert vector length into a speed
         target_speed = constrain_float(safe_sqrt(sq(packet.vx) + sq(packet.vy)), -speed_max, speed_max);
+        omni_x_target_speed = constrain_float( packet.vx , -speed_max, speed_max );
+        omni_y_target_speed = constrain_float( packet.vy , -speed_max, speed_max );
         // convert vector direction to target yaw
         target_yaw_cd = degrees(atan2f(packet.vy, packet.vx)) * 100.0f;
 
@@ -965,7 +969,11 @@ void GCS_MAVLINK_Rover::handle_set_position_target_local_ned(const mavlink_messa
         rover.mode_guided.set_desired_heading_and_speed(target_yaw_cd, speed_dir * target_speed);
     } else if (!vel_ignore && acc_ignore && yaw_ignore && !yaw_rate_ignore) {
         // consume velocity and turn rate
-        rover.mode_guided.set_desired_turn_rate_and_speed(target_turn_rate_cds, speed_dir * target_speed);
+        if(rover.g2.frame_type.get() == AP_MotorsUGV::FRAME_TYPE_UNDEFINED){
+	        rover.mode_guided.set_desired_turn_rate_and_speed(target_turn_rate_cds, speed_dir * target_speed);
+    	}else{
+    		rover.mode_guided.set_desired_omni_turn_rate_and_speed(target_turn_rate_cds, omni_x_target_speed, omni_y_target_speed); 
+    	}
     } else if (!vel_ignore && acc_ignore && !yaw_ignore && yaw_rate_ignore) {
         // consume velocity and heading
         rover.mode_guided.set_desired_heading_and_speed(target_yaw_cd, speed_dir * target_speed);
