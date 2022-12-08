@@ -219,6 +219,16 @@ float AP_MotorsUGV::get_slew_limited_throttle(float throttle, float dt) const
     return constrain_float(throttle, _throttle_prev - throttle_change_max, _throttle_prev + throttle_change_max);
 }
 
+float AP_MotorsUGV::get_slew_limited_lateral(float throttle, float dt) const
+{
+    if (_slew_rate <= 0) {
+        return throttle;
+    }
+
+    const float throttle_change_max = MAX(1.0f, (float)_slew_rate * dt);
+    return constrain_float(throttle, _lateral_prev - throttle_change_max, _lateral_prev + throttle_change_max);
+}
+
 /*
   work out if skid steering is available
  */
@@ -502,9 +512,9 @@ void AP_MotorsUGV::setup_omni()
 
     case FRAME_TYPE_OMNI3:
         _motors_num = 3;
-        add_omni_motor(0, 1.0f, -1.0f, -1.0f);
+        add_omni_motor(0, 0.5f, -1.0f, -0.5f);
         add_omni_motor(1, 0.0f, -1.0f, 1.0f);
-        add_omni_motor(2, 1.0f, 1.0f, 1.0f);
+        add_omni_motor(2, 0.5f, 1.0f, 0.5f);
         break;
 
     case FRAME_TYPE_OMNIX:
@@ -613,7 +623,6 @@ void AP_MotorsUGV::output_regular(bool armed, float ground_speed, float steering
     // clear and set limits based on input
     // we do this here because vectored thrust or speed scaling may have reduced steering request
     set_limits_from_input(armed, steering, throttle);
-
     // constrain steering
     steering = constrain_float(steering, -4500.0f, 4500.0f);
 
@@ -681,6 +690,8 @@ void AP_MotorsUGV::output_omni(bool armed, float steering, float throttle, float
     if (armed) {
         // clear and set limits based on input
         set_limits_from_input(armed, steering, throttle);
+		limit.lateral_throttle_lower = !armed || (lateral <= -_throttle_max);
+		limit.lateral_throttle_upper = !armed || (lateral >= _throttle_max);
 
         // constrain steering
         steering = constrain_float(steering, -4500.0f, 4500.0f);
@@ -807,6 +818,16 @@ void AP_MotorsUGV::slew_limit_throttle(float dt)
         limit.throttle_lower = true;
     }
     _throttle_prev = _throttle;
+	if (rover.get_frame_type() != FRAME_TYPE_UNDEFINED) {
+		const float lateral_orig = _lateral;
+		_lateral = get_slew_limited_lateral(_lateral, dt);
+		if ( lateral_orig > _lateral) {
+		  limit.lateral_throttle_upper = true;
+		} else if (lateral_orig < _lateral){
+			limit.lateral_throttle_lower = true;
+		}
+		_lateral_prev = _lateral ;
+	}
 }
 
 // set limits based on steering and throttle input

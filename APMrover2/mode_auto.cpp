@@ -114,6 +114,16 @@ void ModeAuto::calc_throttle(float target_speed, bool avoidance_enabled)
     Mode::calc_throttle(target_speed, avoidance_enabled);
 }
 
+void ModeAuto::calc_lateral(float target_speed, bool avoidance_enabled)
+{
+    // If not autostarting set the throttle to minimum
+    if (!check_trigger()) {
+        stop_vehicle();
+        return;
+    }
+    Mode::calc_lateral(target_speed, avoidance_enabled);
+}
+
 // return distance (in meters) to destination
 float ModeAuto::get_distance_to_destination() const
 {

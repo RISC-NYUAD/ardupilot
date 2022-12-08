@@ -17,6 +17,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AR_AttitudeControl.h"
 #include <AP_GPS/AP_GPS.h>
+#include <GCS_MAVLink/GCS_MAVLink.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -343,7 +344,8 @@ AR_AttitudeControl::AR_AttitudeControl(AP_AHRS &ahrs) :
     _steer_angle_p(AR_ATTCONTROL_STEER_ANG_P),
     _steer_rate_pid(AR_ATTCONTROL_STEER_RATE_P, AR_ATTCONTROL_STEER_RATE_I, AR_ATTCONTROL_STEER_RATE_D, AR_ATTCONTROL_STEER_RATE_FF, AR_ATTCONTROL_STEER_RATE_IMAX, 0.0f, AR_ATTCONTROL_STEER_RATE_FILT, 0.0f, AR_ATTCONTROL_DT),
     _throttle_speed_pid(AR_ATTCONTROL_THR_SPEED_P, AR_ATTCONTROL_THR_SPEED_I, AR_ATTCONTROL_THR_SPEED_D, 0.0f, AR_ATTCONTROL_THR_SPEED_IMAX, 0.0f, AR_ATTCONTROL_THR_SPEED_FILT, 0.0f, AR_ATTCONTROL_DT),
-    _pitch_to_throttle_pid(AR_ATTCONTROL_PITCH_THR_P, AR_ATTCONTROL_PITCH_THR_I, AR_ATTCONTROL_PITCH_THR_D, 0.0f, AR_ATTCONTROL_PITCH_THR_IMAX, 0.0f, AR_ATTCONTROL_PITCH_THR_FILT, 0.0f, AR_ATTCONTROL_DT),
+	_lateral_throttle_speed_pid(AR_ATTCONTROL_THR_SPEED_P, AR_ATTCONTROL_THR_SPEED_I, AR_ATTCONTROL_THR_SPEED_D, 0.0f, AR_ATTCONTROL_THR_SPEED_IMAX, 0.0f, AR_ATTCONTROL_THR_SPEED_FILT, 0.0f, AR_ATTCONTROL_DT),
+	_pitch_to_throttle_pid(AR_ATTCONTROL_PITCH_THR_P, AR_ATTCONTROL_PITCH_THR_I, AR_ATTCONTROL_PITCH_THR_D, 0.0f, AR_ATTCONTROL_PITCH_THR_IMAX, 0.0f, AR_ATTCONTROL_PITCH_THR_FILT, 0.0f, AR_ATTCONTROL_DT),
     _sailboat_heel_pid(AR_ATTCONTROL_HEEL_SAIL_P, AR_ATTCONTROL_HEEL_SAIL_I, AR_ATTCONTROL_HEEL_SAIL_D, 0.0f, AR_ATTCONTROL_HEEL_SAIL_IMAX, 0.0f, AR_ATTCONTROL_HEEL_SAIL_FILT, 0.0f, AR_ATTCONTROL_DT)
     {
     AP_Param::setup_object_defaults(this, var_info);
@@ -542,6 +544,65 @@ float AR_AttitudeControl::get_throttle_out_speed(float desired_speed, bool motor
     return throttle_out;
 }
 
+float AR_AttitudeControl::get_lateral_throttle_out_speed(float desired_speed, bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt)
+{
+    // sanity check dt
+    dt = constrain_float(dt, 0.0f, 1.0f);
+
+    // get speed forward
+    float speed;
+    if (!get_lateral_speed(speed)) {
+        // we expect caller will not try to control heading using rate control without a valid speed estimate
+        // on failure to get speed we do not attempt to steer
+        return 0.0f;
+    }
+
+    // if not called recently, reset input filter and desired speed to actual speed (used for accel limiting)
+    if (!lateral_speed_control_active()) {
+        _lateral_throttle_speed_pid.reset_filter();
+        _lateral_throttle_speed_pid.reset_I();
+        _desired_speed_lateral = speed;
+    }
+    _lateral_speed_last_ms = AP_HAL::millis();
+
+    // acceleration limit desired speed
+    _desired_speed_lateral = get_desired_lateral_speed_accel_limited(desired_speed, dt);
+
+    // set PID's dt
+    _lateral_throttle_speed_pid.set_dt(dt);
+
+    // calculate base throttle (protect against divide by zero)
+    float throttle_base = 0.0f;
+    if (is_positive(cruise_speed) && is_positive(cruise_throttle)) {
+        throttle_base = _desired_speed_lateral * (cruise_throttle / cruise_speed);
+    }
+
+    // calculate final output
+    float throttle_out = _lateral_throttle_speed_pid.update_all(_desired_speed_lateral, speed, (motor_limit_low || motor_limit_high || _lateral_throttle_limit_low || _lateral_throttle_limit_high));
+    throttle_out += _lateral_throttle_speed_pid.get_ff();
+    throttle_out += throttle_base;
+
+    // clear local limit flags used to stop i-term build-up as we stop reversed outputs going to motors
+    _lateral_throttle_limit_low = false;
+    _lateral_throttle_limit_high = false;
+
+    // protect against reverse output being sent to the motors unless braking has been enabled
+    if (!_brake_enable) {
+        // if both desired speed and actual speed are positive, do not allow negative values
+        if ((_desired_speed_lateral >= 0.0f) && (throttle_out <= 0.0f)) {
+            throttle_out = 0.0f;
+            _lateral_throttle_limit_low = true;
+        } else if ((_desired_speed_lateral <= 0.0f) && (throttle_out >= 0.0f)) {
+            throttle_out = 0.0f;
+            _lateral_throttle_limit_high = true;
+        }
+    }
+
+    // final output throttle in range -1 to 1
+    return throttle_out;
+}
+
+
 // return a throttle output from -1 to +1 to perform a controlled stop.  returns true once the vehicle has stopped
 float AR_AttitudeControl::get_throttle_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped)
 {
@@ -583,6 +644,53 @@ float AR_AttitudeControl::get_throttle_out_stop(bool motor_limit_low, bool motor
     // run speed controller to bring vehicle to stop
     return get_throttle_out_speed(desired_speed_limited, motor_limit_low, motor_limit_high, cruise_speed, cruise_throttle, dt);
 }
+
+float AR_AttitudeControl::get_lateral_throttle_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped)
+{
+    // get current system time
+    const uint32_t now = AP_HAL::millis();
+
+    // if we were stopped in the last 300ms, assume we are still stopped
+    bool _stopped = (_lateral_stop_last_ms != 0) && (now - _lateral_stop_last_ms) < 300;
+
+    // get deceleration limited speed
+    float desired_speed_limited = get_desired_lateral_speed_accel_limited(0.0f, dt);
+
+    // get speed forward
+    float speed;
+    if (!get_lateral_speed(speed)) {
+        // could not get speed so assume stopped
+        _stopped = true;
+    } else {
+        // if desired speed is zero and vehicle drops below _stop_speed consider it stopped
+        if (is_zero(desired_speed_limited) && fabsf(speed) <= fabsf(_stop_speed)) {
+            _stopped = true;
+        }
+    }
+
+    // set stopped status for caller
+    stopped = _stopped;
+
+    // if stopped return zero
+    if (stopped) {
+        // update last time we thought we were stopped
+        _lateral_stop_last_ms = now;
+        // set last time speed controller was run so accelerations are limited
+        _lateral_speed_last_ms = now;
+        // reset filters and I-term
+        _lateral_throttle_speed_pid.reset_filter();
+        _lateral_throttle_speed_pid.reset_I();
+        // ensure desired speed is zero
+        _desired_speed_lateral = 0.0f;
+        return 0.0f;
+    }
+
+    // clear stopped system time
+    _lateral_stop_last_ms = 0;
+    // run speed controller to bring vehicle to stop
+    return get_lateral_throttle_out_speed(desired_speed_limited, motor_limit_low, motor_limit_high, cruise_speed, cruise_throttle, dt);
+}
+
 
 // balancebot pitch to throttle controller
 // returns a throttle output from -100 to +100 given a desired pitch angle and vehicle's current speed (from wheel encoders)
@@ -672,6 +780,7 @@ bool AR_AttitudeControl::get_forward_speed(float &speed) const
     Vector3f velocity;
     if (!_ahrs.get_velocity_NED(velocity)) {
         // use less accurate GPS, assuming entire length is along forward/back axis of vehicle
+		gcs().send_text(MAV_SEVERITY_WARNING, "No NED Velocity Estimate in AHRS");  
         if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
             if (abs(wrap_180_cd(_ahrs.yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
                 speed = AP::gps().ground_speed();
@@ -687,6 +796,29 @@ bool AR_AttitudeControl::get_forward_speed(float &speed) const
     speed = velocity.x*_ahrs.cos_yaw() + velocity.y*_ahrs.sin_yaw();
     return true;
 }
+
+bool AR_AttitudeControl::get_lateral_speed(float &speed) const
+{
+    Vector3f velocity;
+    if (!_ahrs.get_velocity_NED(velocity)) {
+        // use less accurate GPS, assuming entire length is along forward/back axis of vehicle
+//		gcs().send_text(MAV_SEVERITY_WARNING, "No NED Velocity Estimate in AHRS");  
+        if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
+            if (abs(wrap_180_cd(_ahrs.yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
+                speed = AP::gps().ground_speed();
+            } else {
+                speed = -AP::gps().ground_speed();
+            }
+            return true;
+        } else {
+            return false;
+        }
+    }
+    // calculate forward speed velocity into body frame
+    speed = -1.0f * velocity.x*_ahrs.sin_yaw() + velocity.y*_ahrs.cos_yaw();
+    return true;
+}
+
 
 float AR_AttitudeControl::get_decel_max() const
 {
@@ -705,6 +837,14 @@ bool AR_AttitudeControl::speed_control_active() const
         return false;
     }
     return true;
+}
+
+bool AR_AttitudeControl::lateral_speed_control_active() const
+{
+	if ((_lateral_speed_last_ms == 0) || ((AP_HAL::millis() - _lateral_speed_last_ms) > AR_ATTCONTROL_TIMEOUT_MS)) {
+		return false;
+	}
+	return true;
 }
 
 // get latest desired speed recorded during call to get_throttle_out_speed.  For reporting purposes only
@@ -747,6 +887,28 @@ float AR_AttitudeControl::get_desired_speed_accel_limited(float desired_speed, f
     return constrain_float(desired_speed, speed_prev - speed_change_max, speed_prev + speed_change_max);
 }
 
+float AR_AttitudeControl::get_desired_lateral_speed_accel_limited(float desired_speed, float dt) const
+{
+	if(!lateral_speed_control_active() || !is_positive(_throttle_accel_max)){
+		return desired_speed;
+	}
+	dt = constrain_float(dt, 0.0f, 1.0f);
+	float speed_prev = _desired_speed_lateral ; 
+	if(!lateral_speed_control_active()){
+		get_lateral_speed(speed_prev); 
+	}
+    // acceleration limit desired speed
+    float speed_change_max;
+    if (fabsf(desired_speed) < fabsf(_desired_speed_lateral) && is_positive(_throttle_decel_max)) {
+        speed_change_max = _throttle_decel_max * dt;
+    } else {
+        speed_change_max = _throttle_accel_max * dt;
+    }
+    return constrain_float(desired_speed, speed_prev - speed_change_max, speed_prev + speed_change_max);
+}
+
+
+
 // get minimum stopping distance (in meters) given a speed (in m/s)
 float AR_AttitudeControl::get_stopping_distance(float speed) const
 {
@@ -767,5 +929,6 @@ void AR_AttitudeControl::relax_I()
 {
     _steer_rate_pid.reset_I();
     _throttle_speed_pid.reset_I();
+	_lateral_throttle_speed_pid.reset_I();
     _pitch_to_throttle_pid.reset_I();
 }

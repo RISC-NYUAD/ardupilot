@@ -73,6 +73,8 @@ public:
     // same as private slew_limit_throttle method (see below) but does not update throttle state
     float get_slew_limited_throttle(float throttle, float dt) const;
 
+    float get_slew_limited_lateral(float throttle, float dt) const;
+
     // true if vehicle is capable of skid steering
     bool have_skid_steering() const;
 
@@ -100,6 +102,8 @@ public:
         uint8_t steer_right     : 1; // we have reached the steering controller's right most limit
         uint8_t throttle_lower  : 1; // we have reached throttle's lower limit
         uint8_t throttle_upper  : 1; // we have reached throttle's upper limit
+		uint8_t lateral_throttle_lower : 1;
+		uint8_t lateral_throttle_upper : 1;
     } limit;
 
     // var_info for holding Parameter information
@@ -176,6 +180,7 @@ protected:
     float   _steering;  // requested steering as a value from -4500 to +4500
     float   _throttle;  // requested throttle as a value from -100 to 100
     float   _throttle_prev; // throttle input from previous iteration
+	float   _lateral_prev;
     bool    _scale_steering = true; // true if we should scale steering by speed or angle
     float   _lateral;  // requested lateral input as a value from -100 to +100
     float   _mainsail;  // requested mainsail input as a value from 0 to 100

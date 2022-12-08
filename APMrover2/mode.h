@@ -174,6 +174,8 @@ protected:
     // on things like proximity to corners and current speed
     virtual void calc_throttle(float target_speed, bool avoidance_enabled);
 
+	virtual void calc_lateral(float target_speed, bool avoidance_enabled);
+
     // performs a controlled stop. returns true once vehicle has stopped
     bool stop_vehicle();
 
@@ -243,6 +245,7 @@ public:
     // methods that affect movement of the vehicle in this mode
     void update() override;
     void calc_throttle(float target_speed, bool avoidance_enabled) override;
+    void calc_lateral(float target_speed, bool avoidance_enabled) override;
 
     // attributes of the mode
     bool is_autopilot_mode() const override { return true; }
@@ -386,6 +389,7 @@ public:
     // set desired heading-delta, turn-rate and speed
     void set_desired_heading_delta_and_speed(float yaw_delta_cd, float target_speed);
     void set_desired_turn_rate_and_speed(float turn_rate_cds, float target_speed);
+    void set_desired_omni_turn_rate_and_speed(float turn_rate_cds, float x_target_speed, float y_target_speed);
 
     // vehicle start loiter
     bool start_loiter();
@@ -414,6 +418,8 @@ protected:
     uint32_t _des_att_time_ms;  // system time last call to set_desired_attitude was made (used for timeout)
     float _desired_yaw_rate_cds;// target turn rate centi-degrees per second
     bool sent_notification;     // used to send one time notification to ground station
+	float _desired_speed_omni_x;
+	float _desired_speed_omni_y;
 
     // limits
     struct {

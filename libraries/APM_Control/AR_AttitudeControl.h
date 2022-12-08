@@ -104,6 +104,12 @@ public:
     // return a throttle output from -1 to +1 to perform a controlled stop.  stopped is set to true once stop has been completed
     float get_throttle_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped);
 
+	float get_lateral_throttle_out_speed(float desired_speed, bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt);
+
+    float get_lateral_throttle_out_stop(bool motor_limit_low, bool motor_limit_high, float cruise_speed, float cruise_throttle, float dt, bool &stopped);
+
+
+
     // balancebot pitch to throttle controller
     // returns a throttle output from -100 to +100 given a desired pitch angle and vehicle's current speed (from wheel encoders)
     // desired_pitch is in radians, veh_speed_pct is supplied as a percentage (-100 to +100) of vehicle's top speed
@@ -120,10 +126,13 @@ public:
     AC_PID& get_steering_rate_pid() { return _steer_rate_pid; }
     AC_PID& get_throttle_speed_pid() { return _throttle_speed_pid; }
     AC_PID& get_pitch_to_throttle_pid() { return _pitch_to_throttle_pid; }
+    AC_PID& get_lateral_throttle_speed_pid() { return _lateral_throttle_speed_pid; }
     AC_PID& get_sailboat_heel_pid() { return _sailboat_heel_pid; }
 
     // get forward speed in m/s (earth-frame horizontal velocity but only along vehicle x-axis).  returns true on success
     bool get_forward_speed(float &speed) const;
+
+    bool get_lateral_speed(float &speed) const;
 
     // get throttle/speed controller maximum acceleration (also used for deceleration)
     float get_accel_max() const { return MAX(_throttle_accel_max, 0.0f); }
@@ -134,11 +143,15 @@ public:
     // check if speed controller active
     bool speed_control_active() const;
 
+    bool lateral_speed_control_active() const;
+
     // get latest desired speed recorded during call to get_throttle_out_speed.  For reporting purposes only
     float get_desired_speed() const;
 
     // get acceleration limited desired speed
     float get_desired_speed_accel_limited(float desired_speed, float dt) const;
+
+    float get_desired_lateral_speed_accel_limited(float desired_speed, float dt) const;
 
     // get minimum stopping distance (in meters) given a speed (in m/s)
     float get_stopping_distance(float speed) const;
@@ -158,6 +171,7 @@ private:
     AC_P     _steer_angle_p;        // steering angle controller
     AC_PID   _steer_rate_pid;       // steering rate controller
     AC_PID   _throttle_speed_pid;   // throttle speed controller
+	AC_PID   _lateral_throttle_speed_pid;
     AC_PID   _pitch_to_throttle_pid;// balancebot pitch controller
     AP_Float _pitch_to_throttle_speed_ff;   // balancebot feed forward from speed
 
@@ -176,10 +190,15 @@ private:
 
     // throttle control
     uint32_t _speed_last_ms;        // system time of last call to get_throttle_out_speed
+	uint32_t _lateral_speed_last_ms;
     float    _desired_speed;        // last recorded desired speed
+	float	 _desired_speed_lateral;
     uint32_t _stop_last_ms;         // system time the vehicle was at a complete stop
+    uint32_t _lateral_stop_last_ms;
     bool     _throttle_limit_low;   // throttle output was limited from going too low (used to reduce i-term buildup)
     bool     _throttle_limit_high;  // throttle output was limited from going too high (used to reduce i-term buildup)
+	bool	 _lateral_throttle_limit_low;
+	bool	 _lateral_throttle_limit_high;
 
     // balancebot pitch control
     uint32_t _balance_last_ms = 0;
