@@ -780,7 +780,11 @@ bool AR_AttitudeControl::get_forward_speed(float &speed) const
     Vector3f velocity;
     if (!_ahrs.get_velocity_NED(velocity)) {
         // use less accurate GPS, assuming entire length is along forward/back axis of vehicle
-		gcs().send_text(MAV_SEVERITY_WARNING, "No NED Velocity Estimate in AHRS");  
+		const uint32_t now = AP_HAL::millis();
+		if ((_custom_ahrs_warn_last_ms == 0) || ((now - _custom_ahrs_warn_last_ms) > 5000)){
+			gcs().send_text(MAV_SEVERITY_WARNING, "No NED Velocity Estimate in AHRS");  
+			_custom_ahrs_warn_last_ms = now;
+		}
         if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
             if (abs(wrap_180_cd(_ahrs.yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
                 speed = AP::gps().ground_speed();
@@ -802,7 +806,6 @@ bool AR_AttitudeControl::get_lateral_speed(float &speed) const
     Vector3f velocity;
     if (!_ahrs.get_velocity_NED(velocity)) {
         // use less accurate GPS, assuming entire length is along forward/back axis of vehicle
-//		gcs().send_text(MAV_SEVERITY_WARNING, "No NED Velocity Estimate in AHRS");  
         if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
             if (abs(wrap_180_cd(_ahrs.yaw_sensor - AP::gps().ground_course_cd())) <= 9000) {
                 speed = AP::gps().ground_speed();

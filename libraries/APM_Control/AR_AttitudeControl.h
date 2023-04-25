@@ -199,6 +199,7 @@ private:
     bool     _throttle_limit_high;  // throttle output was limited from going too high (used to reduce i-term buildup)
 	bool	 _lateral_throttle_limit_low;
 	bool	 _lateral_throttle_limit_high;
+	mutable uint32_t _custom_ahrs_warn_last_ms = 0;
 
     // balancebot pitch control
     uint32_t _balance_last_ms = 0;
